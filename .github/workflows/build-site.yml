@@ -1,64 +1,151 @@
-name: Build iXGAME from RAW
-
+name: Build and Deploy iXGAME
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
-
 permissions:
-  contents: write
-
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: true
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
+      # ----------------------------------------
+      # 1. تحميل مستودع iXGAME
+      # ----------------------------------------
       - name: Checkout iXGAME
         uses: actions/checkout@v4
-
-      - name: Download RAW project
+        with:
+          path: source
+      # ----------------------------------------
+      # 2. تحميل RAW كمصدر للملفات المطلوبة
+      # ----------------------------------------
+      - name: Download RAW source
         run: |
-          curl -L --fail \
-            https://github.com/rawgame4/rawgame4.github.io/archive/refs/heads/main.zip \
-            -o raw.zip
-
-          mkdir raw
-          unzip -q raw.zip -d raw
-
-      - name: Copy RAW files
+          git clone --depth 1 \
+            https://github.com/rawgame4/rawgame4.github.io.git \
+            raw
+      # ----------------------------------------
+      # 3. إنشاء موقع نظيف من الصفر
+      # ----------------------------------------
+      - name: Create clean build
         run: |
-          RAW_DIR=$(find raw -mindepth 1 -maxdepth 1 -type d | head -n 1)
-
-          if [ -z "$RAW_DIR" ]; then
-            echo "RAW directory was not found"
-            exit 1
+          rm -rf build
+          mkdir build
+      # ----------------------------------------
+      # 4. نسخ ملفات RAW الضرورية فقط
+      # ----------------------------------------
+      - name: Copy required RAW files
+        run: |
+          # JavaScript / WebKit files
+          cp raw/chain_lapse.js build/ || true
+          cp raw/chain_poops.js build/ || true
+          cp raw/core.js build/ || true
+          cp raw/mem.js build/ || true
+          cp raw/int64.js build/ || true
+          cp raw/ps4_offsets.js build/ || true
+          cp raw/rpc_worker.js build/ || true
+          # Payload / patches
+          cp raw/payload.bin build/ || true
+          if [ -d raw/patches ]; then
+            cp -a raw/patches build/patches
           fi
-
-          echo "Using RAW directory: $RAW_DIR"
-
-          cp -a "$RAW_DIR/." ./
-
-          rm -rf raw raw.zip
-
-      - name: Apply iXGAME customization
+          # أي ملفات إضافية يحتاجها JavaScript الأصلي
+          find raw -maxdepth 1 -type f \
+            \( -name "*.js" -o -name "*.bin" -o -name "*.wasm" \) \
+            -exec cp {} build/ \;
+      # ----------------------------------------
+      # 5. وضع واجهة iXGAME الخاصة بنا
+      # ----------------------------------------
+      - name: Install iXGAME interface
         run: |
-          rm -rf custom
-          mkdir custom
-
-          unzip -q iXGAME.io-custom-site.zip -d custom
-
-          cp -f custom/index.html ./index.html
-          cp -f custom/cache.appcache ./cache.appcache
-          cp -f custom/ixgame-banner.png ./ixgame-banner.png
-
-      - name: Commit built website
+          cp source/index.html build/index.html
+          cp source/run_lapse.html build/run_lapse.html || true
+          cp source/run_poops.html build/run_poops.html || true
+      # ----------------------------------------
+      # 6. صورة iXGAME
+      # ----------------------------------------
+      - name: Install iXGAME branding
         run: |
-          git config user.name "iXGAME Bot"
-          git config user.email "actions@github.com"
-
-          git add -A
-
-          if git diff --cached --quiet; then
-            echo "Nothing to commit"
-          else
-            git commit -m "Build iXGAME site from RAW"
-            git push
+          if [ -f source/ixgame-banner.png ]; then
+            cp source/ixgame-banner.png build/ixgame-banner.png
           fi
+      # ----------------------------------------
+      # 7. إنشاء cache جديد
+      # ----------------------------------------
+      - name: Create iXGAME cache manifest
+        run: |
+          cat > build/cache.appcache <<'EOF'
+          CACHE MANIFEST
+          # iXGAME.io - ايهم 2026
+          index.html
+          run_lapse.html
+          run_poops.html
+          ixgame-banner.png
+          NETWORK:
+          *
+          EOF
+      # ----------------------------------------
+      # 8. منع أي ملفات RAW غير مرغوبة
+      # ----------------------------------------
+      - name: Clean unwanted files
+        run: |
+          rm -rf build/.git
+          rm -rf build/.github
+          rm -rf build/.gitignore
+          # حذف ملفات RAW الخاصة بالواجهة القديمة
+          rm -f build/README.md
+          rm -f build/LICENSE
+          rm -f build/logo_raw.png
+      # ----------------------------------------
+      # 9. التحقق من البناء
+      # ----------------------------------------
+      - name: Verify iXGAME build
+        run: |
+          echo "===== iXGAME BUILD ====="
+          find build -maxdepth 2 -type f | sort
+          echo "========================"
+          test -f build/index.html
+          test -f build/chain_lapse.js
+          echo "iXGAME build OK."
+      # ----------------------------------------
+      # 10. إعداد GitHub Pages
+      # ----------------------------------------
+      - name: Setup GitHub Pages
+        uses: actions/configure-pages@v5
+      # ----------------------------------------
+      # 11. رفع الموقع
+      # ----------------------------------------
+      - name: Upload website
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./build
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      # ----------------------------------------
+      # 12. نشر iXGAME
+      # ----------------------------------------
+      - name: Deploy iXGAME
+        id: deployment
+        uses: actions/deploy-pages@v4
+      # ----------------------------------------
+      # 13. إظهار الرابط
+      # ----------------------------------------
+      - name: Show website URL
+        run: |
+          echo "===================================="
+          echo "       iXGAME WEBSITE DEPLOYED"
+          echo "===================================="
+          echo "URL:"
+          echo "${{ steps.deployment.outputs.page_url }}"
+          echo "===================================="
