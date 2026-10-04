@@ -1,11 +1,7 @@
-name: Rebuild iXGAME PS4 Site
+name: iXGAME - Clean & Rebuild
 
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - "iXGAME-clean-rebuild.zip"
-      - ".github/workflows/rebuild.yml"
 
 permissions:
   contents: read
@@ -13,66 +9,140 @@ permissions:
   id-token: write
 
 concurrency:
-  group: pages
+  group: github-pages
   cancel-in-progress: true
 
 jobs:
+
+  # ==========================================
+  # 1. DELETE OLD SITE + BUILD NEW SITE
+  # ==========================================
   build:
     runs-on: ubuntu-latest
 
     steps:
+
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
 
-      - name: Prepare site
+      - name: Find iXGAME ZIP
         shell: bash
         run: |
           set -e
 
-          echo "Cleaning workspace..."
+          echo "Searching for iXGAME ZIP..."
 
-          mkdir -p /tmp/ixgame
-          cp "iXGAME-clean-rebuild.zip" /tmp/ixgame/site.zip
+          ZIP=$(find . -maxdepth 2 -type f \
+            \( -name "iXGAME-from-scratch.zip" \
+            -o -name "iXGAME-clean-rebuild.zip" \) \
+            -print -quit)
 
-          find . -mindepth 1 \
-            -not -path './.git' \
-            -not -path './.git/*' \
-            -not -path './.github' \
-            -not -path './.github/*' \
-            -not -name 'iXGAME-clean-rebuild.zip' \
-            -delete
+          if [ -z "$ZIP" ]; then
+            echo "ERROR: iXGAME ZIP was not found."
+            echo "Upload iXGAME-from-scratch.zip to the repository root."
+            exit 1
+          fi
 
-          echo "Extracting iXGAME site..."
+          echo "Found:"
+          echo "$ZIP"
 
-          unzip -o /tmp/ixgame/site.zip -d .
+          cp "$ZIP" /tmp/iXGAME.zip
 
-          rm -rf /tmp/ixgame
+      - name: DELETE OLD WEBSITE
+        shell: bash
+        run: |
+          set -e
 
-          echo "Site files:"
-          find . -maxdepth 3 -type f | sort
+          echo "======================================"
+          echo " DELETE OLD WEBSITE"
+          echo "======================================"
 
-      - name: Configure Pages
+          rm -rf /tmp/site
+          mkdir -p /tmp/site
+
+          echo "Old website files will NOT be reused."
+
+      - name: EXTRACT NEW WEBSITE
+        shell: bash
+        run: |
+          set -e
+
+          echo "======================================"
+          echo " EXTRACT NEW iXGAME WEBSITE"
+          echo "======================================"
+
+          unzip -q /tmp/iXGAME.zip -d /tmp/site
+
+          echo "Extracted files:"
+          find /tmp/site -type f | sort
+
+      - name: Normalize website root
+        shell: bash
+        run: |
+          set -e
+
+          # Find the actual index.html anywhere inside the ZIP.
+          INDEX=$(find /tmp/site -type f -name "index.html" -print -quit)
+
+          if [ -z "$INDEX" ]; then
+            echo "ERROR: index.html was not found in the ZIP."
+            exit 1
+          fi
+
+          INDEX_DIR=$(dirname "$INDEX")
+
+          echo "Website root:"
+          echo "$INDEX_DIR"
+
+          mkdir -p /tmp/final-site
+
+          cp -a "$INDEX_DIR"/. /tmp/final-site/
+
+          echo "Final website:"
+          find /tmp/final-site -type f | sort
+
+      - name: Verify new website
+        shell: bash
+        run: |
+          set -e
+
+          test -f /tmp/final-site/index.html
+
+          echo "======================================"
+          echo " NEW WEBSITE VERIFIED"
+          echo "======================================"
+
+          ls -lah /tmp/final-site
+
+      - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
 
-      - name: Upload Pages artifact
+      - name: Upload NEW website
         uses: actions/upload-pages-artifact@v3
         with:
-          path: .
+          path: /tmp/final-site
 
+
+  # ==========================================
+  # 2. DEPLOY
+  # ==========================================
   deploy:
     needs: build
+
+    runs-on: ubuntu-latest
 
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-
-    runs-on: ubuntu-latest
 
     permissions:
       pages: write
       id-token: write
 
     steps:
-      - name: Deploy to GitHub Pages
+
+      - name: Deploy NEW iXGAME website
         id: deployment
         uses: actions/deploy-pages@v4
