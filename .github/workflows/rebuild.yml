@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     paths:
-      - "site.zip"
+      - "iXGAME-clean-rebuild.zip"
       - ".github/workflows/rebuild.yml"
 
 permissions:
@@ -13,7 +13,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: "pages"
+  group: pages
   cancel-in-progress: true
 
 jobs:
@@ -32,9 +32,17 @@ jobs:
           echo "Cleaning workspace..."
 
           mkdir -p /tmp/ixgame
-          cp site.zip /tmp/ixgame/site.zip
+          cp "iXGAME-clean-rebuild.zip" /tmp/ixgame/site.zip
 
-          rm -rf ./*
+          echo "Cleaning old website files..."
+
+          find . -mindepth 1 \
+            -not -path './.git' \
+            -not -path './.git/*' \
+            -not -path './.github' \
+            -not -path './.github/*' \
+            -not -name 'iXGAME-clean-rebuild.zip' \
+            -delete
 
           echo "Extracting iXGAME site..."
 
@@ -43,7 +51,7 @@ jobs:
           rm -rf /tmp/ixgame
 
           echo "Site files:"
-          find . -maxdepth 2 -type f | sort
+          find . -maxdepth 3 -type f | sort
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
