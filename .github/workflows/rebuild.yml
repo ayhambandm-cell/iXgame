@@ -1,23 +1,13 @@
-name: iXGAME - Clean & Rebuild
+name: CLEAN ENTIRE REPOSITORY
 
 on:
   workflow_dispatch:
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
-
-concurrency:
-  group: github-pages
-  cancel-in-progress: true
+  contents: write
 
 jobs:
-
-  # ==========================================
-  # 1. DELETE OLD SITE + BUILD NEW SITE
-  # ==========================================
-  build:
+  clean:
     runs-on: ubuntu-latest
 
     steps:
@@ -25,124 +15,80 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          fetch-depth: 0
+          persist-credentials: true
 
-      - name: Find iXGAME ZIP
+      - name: DELETE EVERYTHING EXCEPT ZIP
         shell: bash
         run: |
           set -e
 
-          echo "Searching for iXGAME ZIP..."
+          KEEP="iXGAME-from-scratch.zip"
 
-          ZIP=$(find . -maxdepth 2 -type f \
-            \( -name "iXGAME-from-scratch.zip" \
-            -o -name "iXGAME-clean-rebuild.zip" \) \
-            -print -quit)
+          echo "======================================"
+          echo "      iXGAME FULL REPOSITORY CLEAN"
+          echo "======================================"
 
-          if [ -z "$ZIP" ]; then
-            echo "ERROR: iXGAME ZIP was not found."
-            echo "Upload iXGAME-from-scratch.zip to the repository root."
+          # التأكد من وجود ZIP
+          if [ ! -f "$KEEP" ]; then
+            echo "ERROR:"
+            echo "$KEEP was not found!"
             exit 1
           fi
 
-          echo "Found:"
-          echo "$ZIP"
+          echo ""
+          echo "Keeping:"
+          echo "$KEEP"
 
-          cp "$ZIP" /tmp/iXGAME.zip
+          echo ""
+          echo "Files currently tracked:"
+          git ls-files
 
-      - name: DELETE OLD WEBSITE
-        shell: bash
-        run: |
-          set -e
+          echo ""
+          echo "Deleting EVERYTHING except:"
+          echo "$KEEP"
 
+          # حذف جميع الملفات المتتبعة ما عدا ZIP
+          git ls-files -z | while IFS= read -r -d '' file; do
+
+            if [ "$file" != "$KEEP" ]; then
+              echo "DELETE: $file"
+              git rm -f -- "$file"
+            else
+              echo "KEEP:   $file"
+            fi
+
+          done
+
+          echo ""
+          echo "Removing empty directories..."
+
+          find . -type d \
+            -not -path './.git*' \
+            -empty \
+            -delete || true
+
+          echo ""
+          echo "Remaining files:"
+          find . \
+            -not -path './.git*' \
+            -type f \
+            -print
+
+          echo ""
+          echo "Committing cleanup..."
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git commit -m "FULL CLEAN: remove old project"
+
+          echo ""
+          echo "Pushing cleanup to main..."
+
+          git push origin HEAD:main
+
+          echo ""
           echo "======================================"
-          echo " DELETE OLD WEBSITE"
+          echo " REPOSITORY CLEANUP COMPLETE"
           echo "======================================"
-
-          rm -rf /tmp/site
-          mkdir -p /tmp/site
-
-          echo "Old website files will NOT be reused."
-
-      - name: EXTRACT NEW WEBSITE
-        shell: bash
-        run: |
-          set -e
-
-          echo "======================================"
-          echo " EXTRACT NEW iXGAME WEBSITE"
-          echo "======================================"
-
-          unzip -q /tmp/iXGAME.zip -d /tmp/site
-
-          echo "Extracted files:"
-          find /tmp/site -type f | sort
-
-      - name: Normalize website root
-        shell: bash
-        run: |
-          set -e
-
-          # Find the actual index.html anywhere inside the ZIP.
-          INDEX=$(find /tmp/site -type f -name "index.html" -print -quit)
-
-          if [ -z "$INDEX" ]; then
-            echo "ERROR: index.html was not found in the ZIP."
-            exit 1
-          fi
-
-          INDEX_DIR=$(dirname "$INDEX")
-
-          echo "Website root:"
-          echo "$INDEX_DIR"
-
-          mkdir -p /tmp/final-site
-
-          cp -a "$INDEX_DIR"/. /tmp/final-site/
-
-          echo "Final website:"
-          find /tmp/final-site -type f | sort
-
-      - name: Verify new website
-        shell: bash
-        run: |
-          set -e
-
-          test -f /tmp/final-site/index.html
-
-          echo "======================================"
-          echo " NEW WEBSITE VERIFIED"
-          echo "======================================"
-
-          ls -lah /tmp/final-site
-
-      - name: Configure GitHub Pages
-        uses: actions/configure-pages@v5
-
-      - name: Upload NEW website
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: /tmp/final-site
-
-
-  # ==========================================
-  # 2. DEPLOY
-  # ==========================================
-  deploy:
-    needs: build
-
-    runs-on: ubuntu-latest
-
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-
-    permissions:
-      pages: write
-      id-token: write
-
-    steps:
-
-      - name: Deploy NEW iXGAME website
-        id: deployment
-        uses: actions/deploy-pages@v4
