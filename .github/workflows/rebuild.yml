@@ -1,310 +1,58 @@
-- name: Install iXGAME interface
-  run: |
-
-    # الصفحة الرئيسية
-    cp /tmp/ixgame-custom/index.html \
-       /tmp/build/index.html
-
-    # ==========================================
-    # iXGAME Lapse page
-    # ==========================================
-
-    cat > /tmp/build/run_lapse.html <<'EOF'
-    <!DOCTYPE html>
-    <html lang="en" manifest="cache.appcache">
-    <head>
-    <meta charset="utf-8">
-    <meta name="viewport"
-          content="width=device-width,
-                   initial-scale=1,
-                   viewport-fit=cover">
+name: Rebuild iXGAME PS4 Site
 
-    <title>iXGAME.io — PS4 Lapse</title>
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "site.zip"
+      - ".github/workflows/rebuild.yml"
 
-    <style>
+permissions:
+  contents: read
+  pages: write
+  id-token: write
 
-    :root {
-      --red:#ff1b1b;
-      --bg:#050506;
-      --panel:rgba(12,12,14,.94);
-      --line:rgba(255,30,30,.34);
-      --text:#f2f2f2;
-    }
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
 
-    * {
-      box-sizing:border-box;
-    }
+jobs:
+  build:
+    runs-on: ubuntu-latest
 
-    html,
-    body {
-      margin:0;
-      padding:0;
-      width:100%;
-      min-height:100%;
-      background:#050506;
-      color:var(--text);
-      font-family:
-        "Segoe UI",
-        system-ui,
-        sans-serif;
-    }
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    body {
-      min-height:100vh;
-      min-height:100dvh;
+      - name: Prepare site
+        shell: bash
+        run: |
+          set -e
 
-      background:
-        radial-gradient(
-          circle at 50% 0%,
-          rgba(255,0,0,.14),
-          transparent 42%
-        ),
-        linear-gradient(
-          #050506,
-          #080809
-        );
-    }
+          echo "Cleaning workspace..."
 
-    /* =========================
-       iXGAME HEADER
-       ========================= */
+          mkdir -p /tmp/ixgame
+          cp site.zip /tmp/ixgame/site.zip
 
-    #brand {
+          rm -rf ./*
 
-      position:sticky;
-      top:0;
+          echo "Extracting iXGAME site..."
 
-      z-index:10;
+          unzip -o /tmp/ixgame/site.zip -d .
 
-      display:flex;
+          rm -rf /tmp/ixgame
 
-      align-items:center;
-      justify-content:center;
+          echo "Site files:"
+          find . -maxdepth 2 -type f | sort
 
-      gap:12px;
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
 
-      min-height:58px;
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
 
-      padding:8px 14px;
-
-      background:
-        rgba(5,5,6,.96);
-
-      border-bottom:
-        1px solid var(--line);
-
-      backdrop-filter:
-        blur(10px);
-    }
-
-    #brand img {
-
-      width:38px;
-      height:38px;
-
-      object-fit:cover;
-
-      border-radius:9px;
-
-      border:
-        1px solid var(--line);
-
-      box-shadow:
-        0 0 16px
-        rgba(255,0,0,.18);
-    }
-
-    #brand .name {
-
-      font-size:16px;
-
-      font-weight:900;
-
-      letter-spacing:.14em;
-    }
-
-    #brand .name span {
-      color:var(--red);
-    }
-
-    /* =========================
-       CONTENT
-       ========================= */
-
-    #wrap {
-
-      width:min(
-        1400px,
-        100%
-      );
-
-      margin:auto;
-
-      padding:12px;
-    }
-
-    #state {
-
-      font-size:
-        clamp(
-          18px,
-          2vw,
-          24px
-        );
-
-      font-weight:800;
-
-      margin:
-        0 0 10px;
-    }
-
-    #out {
-
-      white-space:pre-wrap;
-
-      overflow:auto;
-
-      width:100%;
-
-      min-height:
-        calc(
-          100vh - 120px
-        );
-
-      min-height:
-        calc(
-          100dvh - 120px
-        );
-
-      padding:
-        12px 14px;
-
-      background:
-        var(--panel);
-
-      border:
-        1px solid var(--line);
-
-      border-radius:10px;
-
-      font:
-        clamp(
-          11px,
-          1.1vw,
-          14px
-        )
-        /1.45
-        Consolas,
-        Monaco,
-        monospace;
-
-      overflow-wrap:anywhere;
-
-      -webkit-overflow-scrolling:
-        touch;
-    }
-
-    .ok {
-      color:#7fd0a0;
-    }
-
-    .bad {
-      color:#ff7777;
-    }
-
-    .warn {
-      color:#ffd36a;
-    }
-
-    /* =========================
-       MOBILE
-       ========================= */
-
-    @media (max-width:650px) {
-
-      #brand {
-        min-height:50px;
-        padding:6px 10px;
-      }
-
-      #brand img {
-
-        width:32px;
-        height:32px;
-      }
-
-      #brand .name {
-
-        font-size:13px;
-      }
-
-      #wrap {
-
-        padding:8px;
-      }
-
-      #out {
-
-        min-height:
-          calc(
-            100vh - 105px
-          );
-
-        min-height:
-          calc(
-            100dvh - 105px
-          );
-
-        border-radius:7px;
-
-        padding:
-          9px 10px;
-      }
-    }
-
-    </style>
-    </head>
-
-    <body>
-
-    <header id="brand">
-
-      <img
-        src="ixgame-banner.png"
-        alt="iXGAME">
-
-      <div class="name">
-        <span>iX</span>GAME.io
-      </div>
-
-    </header>
-
-    <main id="wrap">
-
-      <div id="state">
-        loading iXGAME lapse chain...
-      </div>
-
-      <div id="out"></div>
-
-    </main>
-
-    <script type="module">
-      import "./chain_lapse.js";
-    </script>
-
-    </body>
-    </html>
-    EOF
-
-    # ==========================================
-    # صورة iXGAME
-    # ==========================================
-
-    if [ -f /tmp/ixgame-custom/ixgame-banner.png ]; then
-
-      cp \
-        /tmp/ixgame-custom/ixgame-banner.png \
-        /tmp/build/ixgame-banner.png
-
-    fi
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
