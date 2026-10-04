@@ -1,206 +1,310 @@
-name: iXGAME Clean Rebuild
-on:
-  workflow_dispatch:
-  push:
-    branches:
-      - main
-permissions:
-  contents: write
-  pages: write
-  id-token: write
-concurrency:
-  group: ixgame-pages
-  cancel-in-progress: true
-jobs:
-  build:
-    name: Build iXGAME
-    runs-on: ubuntu-latest
-    steps:
-      # ==========================================
-      # 1. تحميل مستودع iXGAME
-      # ==========================================
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      # ==========================================
-      # 2. تحميل RAW
-      # ==========================================
-      - name: Download RAW project
-        run: |
-          git clone --depth 1 \
-            https://github.com/rawgame4/rawgame4.github.io.git \
-            /tmp/raw
-      # ==========================================
-      # 3. حفظ ملفات iXGAME المخصصة
-      # ==========================================
-      - name: Save iXGAME files
-        run: |
-          mkdir -p /tmp/ixgame-custom
-          cp index.html \
-             /tmp/ixgame-custom/index.html
-          cp run_lapse.html \
-             /tmp/ixgame-custom/run_lapse.html
-          if [ -f run_poops.html ]; then
-            cp run_poops.html \
-               /tmp/ixgame-custom/run_poops.html
-          fi
-          if [ -f ixgame-banner.png ]; then
-            cp ixgame-banner.png \
-               /tmp/ixgame-custom/ixgame-banner.png
-          fi
-      # ==========================================
-      # 4. إنشاء Build جديد من الصفر
-      # ==========================================
-      - name: Create clean build
-        run: |
-          rm -rf /tmp/build
-          mkdir -p /tmp/build
-      # ==========================================
-      # 5. نسخ محرك RAW فقط
-      # ==========================================
-      - name: Copy RAW engine
-        run: |
-          # JavaScript
-          find /tmp/raw \
-            -maxdepth 1 \
-            -type f \
-            -name "*.js" \
-            -exec cp {} /tmp/build/ \;
-          # Binary / WASM
-          find /tmp/raw \
-            -maxdepth 1 \
-            -type f \
-            \( \
-              -name "*.bin" \
-              -o -name "*.wasm" \
-            \) \
-            -exec cp {} /tmp/build/ \;
-          # Patches
-          if [ -d /tmp/raw/patches ]; then
-            cp -a /tmp/raw/patches \
-              /tmp/build/patches
-          fi
-      # ==========================================
-      # 6. وضع واجهة iXGAME
-      # ==========================================
-      - name: Install iXGAME interface
-        run: |
-          cp /tmp/ixgame-custom/index.html \
-             /tmp/build/index.html
-          cp /tmp/ixgame-custom/run_lapse.html \
-             /tmp/build/run_lapse.html
-          if [ -f /tmp/ixgame-custom/run_poops.html ]; then
-            cp /tmp/ixgame-custom/run_poops.html \
-               /tmp/build/run_poops.html
-          fi
-          if [ -f /tmp/ixgame-custom/ixgame-banner.png ]; then
-            cp /tmp/ixgame-custom/ixgame-banner.png \
-               /tmp/build/ixgame-banner.png
-          fi
-      # ==========================================
-      # 7. إنشاء Cache Manifest
-      # ==========================================
-      - name: Create cache manifest
-        run: |
-          cat > /tmp/build/cache.appcache <<'EOF'
-          CACHE MANIFEST
-          # iXGAME.io
-          # ايهم 2026
-          NETWORK:
-          *
-          EOF
-      # ==========================================
-      # 8. إزالة هوية RAW القديمة
-      # ==========================================
-      - name: Remove RAW branding
-        run: |
-          rm -f /tmp/build/README.md
-          rm -f /tmp/build/LICENSE
-          rm -f /tmp/build/logo_raw.png
-      # ==========================================
-      # 9. فحص الموقع قبل النشر
-      # ==========================================
-      - name: Verify build
-        run: |
-          echo "=============================="
-          echo "      iXGAME BUILD"
-          echo "=============================="
-          echo ""
-          echo "Files:"
-          find /tmp/build \
-            -maxdepth 2 \
-            -type f \
-            | sort
-          echo ""
-          test -f /tmp/build/index.html
-          test -f /tmp/build/run_lapse.html
-          test -f /tmp/build/chain_lapse.js
-          echo ""
-          echo "BUILD OK"
-      # ==========================================
-      # 10. استبدال محتويات المستودع بالبناء الجديد
-      # ==========================================
-      - name: Replace repository
-        run: |
-          find . \
-            -mindepth 1 \
-            -maxdepth 1 \
-            ! -name ".git" \
-            ! -name ".github" \
-            -exec rm -rf {} +
-          cp -a /tmp/build/. .
-      # ==========================================
-      # 11. حفظ البناء الجديد في GitHub
-      # ==========================================
-      - name: Commit rebuilt website
-        run: |
-          git config user.name \
-            "iXGAME Builder"
-          git config user.email \
-            "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git commit \
-            -m "iXGAME clean rebuild" \
-            || echo "No changes"
-          git push origin HEAD:main
-      # ==========================================
-      # 12. إعداد GitHub Pages
-      # ==========================================
-      - name: Configure GitHub Pages
-        uses: actions/configure-pages@v5
-      # ==========================================
-      # 13. إنشاء Pages Artifact
-      # ==========================================
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: .
-  # ============================================
-  # DEPLOY
-  # ============================================
-  deploy:
-    name: Deploy iXGAME
-    needs:
-      - build
-    runs-on:
-      ubuntu-latest
-    environment:
-      name: github-pages
-      url:
-        ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
-      - name: Show website URL
-        run: |
-          echo ""
-          echo "======================================"
-          echo "        iXGAME DEPLOYED"
-          echo "======================================"
-          echo ""
-          echo "Website:"
-          echo "${{ steps.deployment.outputs.page_url }}"
-          echo ""
-          echo "======================================"
+- name: Install iXGAME interface
+  run: |
+
+    # الصفحة الرئيسية
+    cp /tmp/ixgame-custom/index.html \
+       /tmp/build/index.html
+
+    # ==========================================
+    # iXGAME Lapse page
+    # ==========================================
+
+    cat > /tmp/build/run_lapse.html <<'EOF'
+    <!DOCTYPE html>
+    <html lang="en" manifest="cache.appcache">
+    <head>
+    <meta charset="utf-8">
+    <meta name="viewport"
+          content="width=device-width,
+                   initial-scale=1,
+                   viewport-fit=cover">
+
+    <title>iXGAME.io — PS4 Lapse</title>
+
+    <style>
+
+    :root {
+      --red:#ff1b1b;
+      --bg:#050506;
+      --panel:rgba(12,12,14,.94);
+      --line:rgba(255,30,30,.34);
+      --text:#f2f2f2;
+    }
+
+    * {
+      box-sizing:border-box;
+    }
+
+    html,
+    body {
+      margin:0;
+      padding:0;
+      width:100%;
+      min-height:100%;
+      background:#050506;
+      color:var(--text);
+      font-family:
+        "Segoe UI",
+        system-ui,
+        sans-serif;
+    }
+
+    body {
+      min-height:100vh;
+      min-height:100dvh;
+
+      background:
+        radial-gradient(
+          circle at 50% 0%,
+          rgba(255,0,0,.14),
+          transparent 42%
+        ),
+        linear-gradient(
+          #050506,
+          #080809
+        );
+    }
+
+    /* =========================
+       iXGAME HEADER
+       ========================= */
+
+    #brand {
+
+      position:sticky;
+      top:0;
+
+      z-index:10;
+
+      display:flex;
+
+      align-items:center;
+      justify-content:center;
+
+      gap:12px;
+
+      min-height:58px;
+
+      padding:8px 14px;
+
+      background:
+        rgba(5,5,6,.96);
+
+      border-bottom:
+        1px solid var(--line);
+
+      backdrop-filter:
+        blur(10px);
+    }
+
+    #brand img {
+
+      width:38px;
+      height:38px;
+
+      object-fit:cover;
+
+      border-radius:9px;
+
+      border:
+        1px solid var(--line);
+
+      box-shadow:
+        0 0 16px
+        rgba(255,0,0,.18);
+    }
+
+    #brand .name {
+
+      font-size:16px;
+
+      font-weight:900;
+
+      letter-spacing:.14em;
+    }
+
+    #brand .name span {
+      color:var(--red);
+    }
+
+    /* =========================
+       CONTENT
+       ========================= */
+
+    #wrap {
+
+      width:min(
+        1400px,
+        100%
+      );
+
+      margin:auto;
+
+      padding:12px;
+    }
+
+    #state {
+
+      font-size:
+        clamp(
+          18px,
+          2vw,
+          24px
+        );
+
+      font-weight:800;
+
+      margin:
+        0 0 10px;
+    }
+
+    #out {
+
+      white-space:pre-wrap;
+
+      overflow:auto;
+
+      width:100%;
+
+      min-height:
+        calc(
+          100vh - 120px
+        );
+
+      min-height:
+        calc(
+          100dvh - 120px
+        );
+
+      padding:
+        12px 14px;
+
+      background:
+        var(--panel);
+
+      border:
+        1px solid var(--line);
+
+      border-radius:10px;
+
+      font:
+        clamp(
+          11px,
+          1.1vw,
+          14px
+        )
+        /1.45
+        Consolas,
+        Monaco,
+        monospace;
+
+      overflow-wrap:anywhere;
+
+      -webkit-overflow-scrolling:
+        touch;
+    }
+
+    .ok {
+      color:#7fd0a0;
+    }
+
+    .bad {
+      color:#ff7777;
+    }
+
+    .warn {
+      color:#ffd36a;
+    }
+
+    /* =========================
+       MOBILE
+       ========================= */
+
+    @media (max-width:650px) {
+
+      #brand {
+        min-height:50px;
+        padding:6px 10px;
+      }
+
+      #brand img {
+
+        width:32px;
+        height:32px;
+      }
+
+      #brand .name {
+
+        font-size:13px;
+      }
+
+      #wrap {
+
+        padding:8px;
+      }
+
+      #out {
+
+        min-height:
+          calc(
+            100vh - 105px
+          );
+
+        min-height:
+          calc(
+            100dvh - 105px
+          );
+
+        border-radius:7px;
+
+        padding:
+          9px 10px;
+      }
+    }
+
+    </style>
+    </head>
+
+    <body>
+
+    <header id="brand">
+
+      <img
+        src="ixgame-banner.png"
+        alt="iXGAME">
+
+      <div class="name">
+        <span>iX</span>GAME.io
+      </div>
+
+    </header>
+
+    <main id="wrap">
+
+      <div id="state">
+        loading iXGAME lapse chain...
+      </div>
+
+      <div id="out"></div>
+
+    </main>
+
+    <script type="module">
+      import "./chain_lapse.js";
+    </script>
+
+    </body>
+    </html>
+    EOF
+
+    # ==========================================
+    # صورة iXGAME
+    # ==========================================
+
+    if [ -f /tmp/ixgame-custom/ixgame-banner.png ]; then
+
+      cp \
+        /tmp/ixgame-custom/ixgame-banner.png \
+        /tmp/build/ixgame-banner.png
+
+    fi
