@@ -1,151 +1,257 @@
-name: Build and Deploy iXGAME
+name: iXGAME Clean Rebuild
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
-  workflow_dispatch:
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 concurrency:
-  group: pages
+  group: ixgame-pages
   cancel-in-progress: true
 jobs:
-  build:
+  rebuild:
     runs-on: ubuntu-latest
     steps:
-      # ----------------------------------------
-      # 1. تحميل مستودع iXGAME
-      # ----------------------------------------
-      - name: Checkout iXGAME
+      # ==========================================
+      # 1. تحميل المستودع
+      # ==========================================
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          path: source
-      # ----------------------------------------
-      # 2. تحميل RAW كمصدر للملفات المطلوبة
-      # ----------------------------------------
+          fetch-depth: 0
+      # ==========================================
+      # 2. تحميل RAW كمصدر
+      # ==========================================
       - name: Download RAW source
         run: |
           git clone --depth 1 \
             https://github.com/rawgame4/rawgame4.github.io.git \
-            raw
-      # ----------------------------------------
-      # 3. إنشاء موقع نظيف من الصفر
-      # ----------------------------------------
-      - name: Create clean build
+            /tmp/raw
+      # ==========================================
+      # 3. إنشاء مجلد بناء نظيف
+      # ==========================================
+      - name: Create clean website
         run: |
-          rm -rf build
-          mkdir build
-      # ----------------------------------------
-      # 4. نسخ ملفات RAW الضرورية فقط
-      # ----------------------------------------
-      - name: Copy required RAW files
+          rm -rf /tmp/ixgame-build
+          mkdir -p /tmp/ixgame-build
+      # ==========================================
+      # 4. نسخ ملفات RAW الضرورية
+      # ==========================================
+      - name: Copy required RAW engine files
         run: |
-          # JavaScript / WebKit files
-          cp raw/chain_lapse.js build/ || true
-          cp raw/chain_poops.js build/ || true
-          cp raw/core.js build/ || true
-          cp raw/mem.js build/ || true
-          cp raw/int64.js build/ || true
-          cp raw/ps4_offsets.js build/ || true
-          cp raw/rpc_worker.js build/ || true
-          # Payload / patches
-          cp raw/payload.bin build/ || true
-          if [ -d raw/patches ]; then
-            cp -a raw/patches build/patches
+          cd /tmp/raw
+          find . -maxdepth 1 -type f \
+            \( -name "*.js" \
+            -o -name "*.bin" \
+            -o -name "*.wasm" \
+            -o -name "*.json" \) \
+            -exec cp {} /tmp/ixgame-build/ \;
+          if [ -d patches ]; then
+            cp -a patches /tmp/ixgame-build/
           fi
-          # أي ملفات إضافية يحتاجها JavaScript الأصلي
-          find raw -maxdepth 1 -type f \
-            \( -name "*.js" -o -name "*.bin" -o -name "*.wasm" \) \
-            -exec cp {} build/ \;
-      # ----------------------------------------
-      # 5. وضع واجهة iXGAME الخاصة بنا
-      # ----------------------------------------
-      - name: Install iXGAME interface
+      # ==========================================
+      # 5. وضع ملفات iXGAME الجديدة
+      # ==========================================
+      - name: Install iXGAME files
         run: |
-          cp source/index.html build/index.html
-          cp source/run_lapse.html build/run_lapse.html || true
-          cp source/run_poops.html build/run_poops.html || true
-      # ----------------------------------------
-      # 6. صورة iXGAME
-      # ----------------------------------------
-      - name: Install iXGAME branding
+          cp index.html /tmp/ixgame-build/index.html 2>/dev/null || true
+          cp run_lapse.html /tmp/ixgame-build/run_lapse.html 2>/dev/null || true
+          cp run_poops.html /tmp/ixgame-build/run_poops.html 2>/dev/null || true
+          cp ixgame-banner.png /tmp/ixgame-build/ixgame-banner.png 2>/dev/null || true
+      # ==========================================
+      # 6. إنشاء صفحة iXGAME إذا لم تكن موجودة
+      # ==========================================
+      - name: Create iXGAME fallback page
         run: |
-          if [ -f source/ixgame-banner.png ]; then
-            cp source/ixgame-banner.png build/ixgame-banner.png
+          if [ ! -f /tmp/ixgame-build/index.html ]; then
+          cat > /tmp/ixgame-build/index.html <<'EOF'
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+          <meta charset="UTF-8">
+          <meta name="viewport"
+                content="width=device-width,initial-scale=1">
+          <title>iXGAME.io</title>
+          <style>
+          html,body{
+            margin:0;
+            min-height:100%;
+            background:#050505;
+            color:white;
+            font-family:Arial,sans-serif;
+          }
+          body{
+            background:
+              linear-gradient(
+                rgba(0,0,0,.7),
+                rgba(0,0,0,.94)
+              ),
+              url("ixgame-banner.png")
+              center/cover fixed;
+          }
+          header{
+            padding:18px;
+            text-align:center;
+            border-bottom:2px solid #e21b23;
+            background:#070707;
+          }
+          header img{
+            width:50px;
+            height:50px;
+            object-fit:cover;
+            border-radius:50%;
+            vertical-align:middle;
+            margin-right:10px;
+          }
+          header strong{
+            font-size:24px;
+            letter-spacing:.12em;
+          }
+          .ix{
+            color:#e21b23;
+          }
+          main{
+            max-width:900px;
+            margin:auto;
+            padding:25px;
+            text-align:center;
+          }
+          h1{
+            font-size:42px;
+            margin:30px 0 5px;
+          }
+          p{
+            color:#aaa;
+          }
+          .button{
+            display:inline-block;
+            margin-top:20px;
+            padding:13px 24px;
+            background:#d71920;
+            border-radius:8px;
+            color:white;
+            font-weight:bold;
+          }
+          footer{
+            margin-top:40px;
+            color:#777;
+            font-size:11px;
+          }
+          </style>
+          </head>
+          <body>
+          <header>
+            <img src="ixgame-banner.png">
+            <strong>
+              <span class="ix">iX</span>GAME.io
+            </strong>
+          </header>
+          <main>
+            <h1>iXGAME</h1>
+            <p>
+              PS4 WebKit
+              •
+              ايهم 2026
+            </p>
+            <a
+              class="button"
+              href="run_lapse.html">
+              PS4 Lapse
+            </a>
+            <footer>
+              iXGAME.io
+              •
+              Telegram @t_9_k
+            </footer>
+          </main>
+          </body>
+          </html>
+          EOF
           fi
-      # ----------------------------------------
-      # 7. إنشاء cache جديد
-      # ----------------------------------------
-      - name: Create iXGAME cache manifest
+      # ==========================================
+      # 7. إنشاء cache
+      # ==========================================
+      - name: Create cache manifest
         run: |
-          cat > build/cache.appcache <<'EOF'
+          cat > /tmp/ixgame-build/cache.appcache <<'EOF'
           CACHE MANIFEST
-          # iXGAME.io - ايهم 2026
-          index.html
-          run_lapse.html
-          run_poops.html
-          ixgame-banner.png
+          # iXGAME.io
+          # ايهم 2026
           NETWORK:
           *
           EOF
-      # ----------------------------------------
-      # 8. منع أي ملفات RAW غير مرغوبة
-      # ----------------------------------------
-      - name: Clean unwanted files
+      # ==========================================
+      # 8. تنظيف الملفات غير المرغوبة
+      # ==========================================
+      - name: Remove RAW branding
         run: |
-          rm -rf build/.git
-          rm -rf build/.github
-          rm -rf build/.gitignore
-          # حذف ملفات RAW الخاصة بالواجهة القديمة
-          rm -f build/README.md
-          rm -f build/LICENSE
-          rm -f build/logo_raw.png
-      # ----------------------------------------
-      # 9. التحقق من البناء
-      # ----------------------------------------
-      - name: Verify iXGAME build
+          rm -f /tmp/ixgame-build/README.md
+          rm -f /tmp/ixgame-build/logo_raw.png
+          rm -f /tmp/ixgame-build/LICENSE
+      # ==========================================
+      # 9. حذف محتويات المستودع الحالي
+      # ==========================================
+      - name: Delete old repository files
         run: |
-          echo "===== iXGAME BUILD ====="
-          find build -maxdepth 2 -type f | sort
-          echo "========================"
-          test -f build/index.html
-          test -f build/chain_lapse.js
-          echo "iXGAME build OK."
-      # ----------------------------------------
-      # 10. إعداد GitHub Pages
-      # ----------------------------------------
-      - name: Setup GitHub Pages
+          find . \
+            -mindepth 1 \
+            -maxdepth 1 \
+            ! -name ".git" \
+            ! -name ".github" \
+            -exec rm -rf {} +
+      # ==========================================
+      # 10. وضع الموقع الجديد
+      # ==========================================
+      - name: Install rebuilt website
+        run: |
+          cp -a /tmp/ixgame-build/. .
+      # ==========================================
+      # 11. Commit الموقع الجديد
+      # ==========================================
+      - name: Commit rebuilt repository
+        run: |
+          git config user.name "iXGAME Builder"
+          git config user.email "actions@github.com"
+          git add -A
+          git commit \
+            -m "Rebuild iXGAME from scratch" \
+            || echo "Nothing to commit"
+          git push origin main
+      # ==========================================
+      # 12. إعداد GitHub Pages
+      # ==========================================
+      - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
-      # ----------------------------------------
-      # 11. رفع الموقع
-      # ----------------------------------------
-      - name: Upload website
+      # ==========================================
+      # 13. رفع الموقع
+      # ==========================================
+      - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: ./build
+          path: .
+  # ============================================
+  # النشر
+  # ============================================
   deploy:
-    needs: build
+    needs: rebuild
     runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      # ----------------------------------------
-      # 12. نشر iXGAME
-      # ----------------------------------------
       - name: Deploy iXGAME
         id: deployment
         uses: actions/deploy-pages@v4
-      # ----------------------------------------
-      # 13. إظهار الرابط
-      # ----------------------------------------
-      - name: Show website URL
+      - name: Show URL
         run: |
-          echo "===================================="
-          echo "       iXGAME WEBSITE DEPLOYED"
-          echo "===================================="
-          echo "URL:"
+          echo ""
+          echo "================================"
+          echo "       iXGAME IS LIVE"
+          echo "================================"
+          echo ""
           echo "${{ steps.deployment.outputs.page_url }}"
-          echo "===================================="
+          echo ""
+          echo "================================"
