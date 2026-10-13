@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="en" manifest="cache.appcache">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="iXGAME.io — PS4 WebKit interface by Aiham">
+<title>iXGAME.io — PS4 WebKit</title>
+<style>
+
+/* ══════════════════════════════════════
+   1. VARIABLES & RESET
+   ══════════════════════════════════════ */
+:root {
+  --red:      #ff1b1b;
+  --bg:       #050506;
+  --panel:    rgba(12,12,14,.93);
+  --line:     rgba(255,30,30,.28);
+  --text:     #f0f0f0;
+  --muted:    #8a8a8a;
+  --ok:       #7fd0a0;
+  --warn:     #ffd36a;
+  --bad:      #ff7777;
+  --radius:   12px;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* ══════════════════════════════════════
+   2. BASE
+   ══════════════════════════════════════ */
+html, body {
+  min-height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.5 "Segoe UI", system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  background:
+    radial-gradient(ellipse 80% 38% at 50% 0%, rgba(255,0,0,.13), transparent),
+    linear-gradient(170deg, #060607 0%, #050506 100%);
+}
+
+a { color: inherit; text-decoration: none; }
+
+/* ══════════════════════════════════════
+   3. HEADER
+   ══════════════════════════════════════ */
+#brand {
+  position: sticky; top: 0; z-index: 20;
+  display: flex; align-items: center;
+  justify-content: space-between; gap: 12px;
+  padding: 12px 20px;
+  background: rgba(5,5,6,.96);
+  border-bottom: 1px solid var(--line);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.brand-name {
+  font-size: 18px; font-weight: 900;
+  letter-spacing: .18em; text-transform: uppercase;
+  user-select: none;
+}
+.brand-name .ix { color: var(--red); }
+
+.tg-btn {
+  display: -webkit-inline-flex; display: inline-flex;
+  -webkit-align-items: center; align-items: center;
+  gap: 6px;
+  border: 1px solid var(--line);
+  padding: 7px 14px; border-radius: 8px;
+  font-size: 12px; font-weight: 600;
+  color: var(--text); letter-spacing: .03em;
+  -webkit-transition: background .2s, border-color .2s;
+  transition: background .2s, border-color .2s;
+  white-space: nowrap;
+}
+.tg-btn::before { content: "\2708"; font-size: 13px; opacity: .8; }
+.tg-btn:hover { background: rgba(255,27,27,.15); border-color: rgba(255,27,27,.5); }
+
+/* ══════════════════════════════════════
+   4. LAYOUT
+   ══════════════════════════════════════ */
+#wrap {
+  width: 100%; max-width: 1100px;
+  margin: 0 auto; padding: 16px;
+  display: -webkit-flex; display: flex;
+  -webkit-flex-direction: column; flex-direction: column;
+  gap: 14px;
+}
+
+/* ══════════════════════════════════════
+   5. HERO / BANNER
+   ══════════════════════════════════════ */
+.hero {
+  position: relative; overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #0a0505;
+  box-shadow: 0 0 40px rgba(255,0,0,.09), 0 2px 12px rgba(0,0,0,.6);
+  min-height: 120px;
+  display: -webkit-flex; display: flex;
+  -webkit-align-items: center; align-items: center;
+  -webkit-justify-content: center; justify-content: center;
+}
+
+.hero img {
+  display: block; width: 100%; height: auto;
+  aspect-ratio: 16/9; object-fit: cover;
+}
+
+.hero::after {
+  content: "";
+  position: absolute; inset: 0;
+  pointer-events: none;
+  background: -webkit-linear-gradient(top, transparent 55%, rgba(0,0,0,.5));
+  background: linear-gradient(180deg, transparent 55%, rgba(0,0,0,.5));
+}
+
+.hero-label {
+  position: absolute; bottom: 12px; right: 14px; z-index: 2;
+  font-size: 11px; font-weight: 700; letter-spacing: .12em;
+  text-transform: uppercase; color: rgba(255,255,255,.45);
+  text-shadow: 0 1px 4px #000;
+}
+
+/* ── Fallback when image fails ── */
+.hero-fallback {
+  display: none;
+  position: relative; z-index: 1;
+  font-size: 42px; font-weight: 900;
+  letter-spacing: .2em; text-transform: uppercase;
+  color: var(--red);
+  text-shadow: 0 0 20px var(--red), 0 0 45px rgba(255,27,27,.35);
+}
+
+.hero.img-error .hero-fallback { display: block; }
+.hero.img-error img            { display: none; }
+.hero.img-error                { min-height: 200px; }
+
+/* ══════════════════════════════════════
+   6. STATUS CARD
+   ══════════════════════════════════════ */
+.status {
+  padding: 18px 18px 14px;
+  border: 1px solid var(--line);
+  border-left: 3px solid rgba(255,27,27,.45);
+  border-radius: var(--radius);
+  background: var(--panel);
+  -webkit-transition: border-left-color .35s;
+  transition: border-left-color .35s;
+}
+.status.state-ok   { border-left-color: var(--ok); }
+.status.state-bad  { border-left-color: var(--bad); }
+.status.state-warn { border-left-color: var(--warn); }
+
+#state {
+  font-size: 20px; font-weight: 800;
+  letter-spacing: .04em; margin-bottom: 8px;
+  -webkit-transition: color .25s; transition: color .25s;
+}
+#state.ok   { color: var(--ok); }
+#state.bad  { color: var(--bad); }
+#state.warn { color: var(--warn); }
+
+@-webkit-keyframes pulse {
+  0%, 100% { opacity: 1; }   50% { opacity: .4; }
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }   50% { opacity: .4; }
+}
+#state.detecting {
+  color: var(--muted);
+  -webkit-animation: pulse 1.6s ease-in-out infinite;
+  animation: pulse 1.6s ease-in-out infinite;
+}
+
+#det  { font-size: 13px; color: var(--muted); margin-bottom: 6px; line-height: 1.55; }
+#det b { color: var(--text); font-weight: 700; }
+#cache { font-size: 12px; color: #606060; min-height: 16px; }
+#cache.ok { color: var(--ok); }
+
+/* ══════════════════════════════════════
+   7. FOOTER
+   ══════════════════════════════════════ */
+.footer {
+  display: -webkit-flex; display: flex;
+  -webkit-justify-content: space-between; justify-content: space-between;
+  -webkit-align-items: center; align-items: center;
+  -webkit-flex-wrap: wrap; flex-wrap: wrap;
+  gap: 8px; padding: 10px 2px 6px;
+  border-top: 1px solid rgba(255,255,255,.05);
+  color: #575757; font-size: 11px; line-height: 1.7;
+}
+.footer strong { color: #c0c0c0; font-weight: 700; }
+.footer a { color: #686868; -webkit-transition: color .2s; transition: color .2s; }
+.footer a:hover { color: var(--red); }
+
+/* ══════════════════════════════════════
+   8. NEON OVERLAY  (pure CSS, no images)
+   ══════════════════════════════════════ */
+
+.neon-overlay {
+  position: fixed; inset: 0; z-index: 300;
+  display: -webkit-flex; display: flex;
+  -webkit-flex-direction: column; flex-direction: column;
+  -webkit-align-items: center; align-items: center;
+  -webkit-justify-content: center; justify-content: center;
+  overflow: hidden;
+  background: #000;
+
+  /* Theme tokens — default orange */
+  --nc:     #ffaa00;
+  --nc-dim: rgba(255,170,0,.14);
+  --nt:     #ffd36a;
+
+  /* Hidden by default */
+  opacity: 0; visibility: hidden; pointer-events: none;
+  -webkit-transition: opacity .35s, visibility .35s;
+  transition: opacity .35s, visibility .35s;
+}
+
+.neon-overlay.active {
+  opacity: 1; visibility: visible; pointer-events: all;
+}
+
+/* ── Themes ── */
+.neon-overlay.st-wait { --nc: #ffaa00; --nc-dim: rgba(255,170,0,.14); --nt: #ffd36a; }
+.neon-overlay.st-done { --nc: #00ff55; --nc-dim: rgba(0,255,85,.14);  --nt: #90ff90; }
+.neon-overlay.st-fail { --nc: #ff2222; --nc-dim: rgba(255,34,34,.14);  --nt: #ff8888; }
+
+/* ── Side neon columns ── */
+.neon-col {
+  position: absolute;
+  top: 0; bottom: 0;
+  width: 3px;
+  border-radius: 2px;
+  background: -webkit-linear-gradient(top, transparent 0%, var(--nc) 15%, var(--nc) 85%, transparent 100%);
+  background: linear-gradient(to bottom, transparent 0%, var(--nc) 15%, var(--nc) 85%, transparent 100%);
+}
+
+.neon-overlay.active .neon-col {
+  -webkit-animation: col-glow 2s ease-in-out infinite alternate;
+  animation: col-glow 2s ease-in-out infinite alternate;
+}
+
+@-webkit-keyframes col-glow {
+  from { box-shadow: 0 0 6px 2px var(--nc), 0 0 16px 4px var(--nc-dim); }
+  to   { box-shadow: 0 0 14px 5px var(--nc), 0 0 35px 12px var(--nc-dim); }
+}
+@keyframes col-glow {
+  from { box-shadow: 0 0 6px 2px var(--nc), 0 0 16px 4px var(--nc-dim); }
+  to   { box-shadow: 0 0 14px 5px var(--nc), 0 0 35px 12px var(--nc-dim); }
+}
+
+.neon-col-l { left: 80px; }
+.neon-col-r { right: 80px; }
+
+/* Diamond accents on columns */
+.neon-col::before,
+.neon-col::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  width: 18px; height: 18px;
+  border: 2px solid var(--nc);
+  box-shadow: 0 0 8px var(--nc);
+  -webkit-transform: translateX(-50%) rotate(45deg);
+  transform: translateX(-50%) rotate(45deg);
+}
+.neon-col::before { top: 120px; }
+.neon-col::after  { bottom: 120px; }
+
+/* ── Center content ── */
+.neon-body {
+  position: relative; z-index: 2;
+  display: -webkit-flex; display: flex;
+  -webkit-flex-direction: column; flex-direction: column;
+  -webkit-align-items: center; align-items: center;
+  text-align: center;
+  padding: 0 140px;
+}
+
+.neon-overlay.active .neon-body {
+  -webkit-animation: body-rise .45s .1s cubic-bezier(.22,1,.36,1) both;
+  animation: body-rise .45s .1s cubic-bezier(.22,1,.36,1) both;
+}
+
+@-webkit-keyframes body-rise {
+  from { -webkit-transform: translateY(24px); opacity: 0; }
+  to   { -webkit-transform: translateY(0);    opacity: 1; }
+}
+@keyframes body-rise {
+  from { transform: translateY(24px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+/* ── Logo ── */
+.neon-logo {
+  margin-bottom: 24px;
+  display: -webkit-flex; display: flex;
+  -webkit-flex-direction: column; flex-direction: column;
+  -webkit-align-items: center; align-items: center;
+  gap: 6px;
+}
+
+.neon-logo svg { filter: drop-shadow(0 0 8px var(--nc)); }
+
+.neon-logo-label {
+  font-size: 10px; font-weight: 700;
+  letter-spacing: .38em; text-transform: uppercase;
+  color: var(--nt); opacity: .9;
+  text-shadow: 0 0 8px var(--nc);
+}
+
+/* ── Main Arabic message ── */
+.neon-msg {
+  font-size: 60px; font-weight: 900; line-height: 1.1;
+  color: var(--nt);
+  text-shadow:
+    0 0 8px  var(--nc),
+    0 0 22px var(--nc),
+    0 0 50px var(--nc),
+    0 0 90px var(--nc-dim);
+  direction: rtl;
+  margin-bottom: 20px;
+  -webkit-animation: text-flicker 5s ease-in-out infinite;
+  animation: text-flicker 5s ease-in-out infinite;
+}
+
+@-webkit-keyframes text-flicker {
+  0%, 17%, 19%, 22%, 24%, 53%, 55%, 100% { opacity: 1; }
+  18%, 23%, 54% { opacity: .82; }
+}
+@keyframes text-flicker {
+  0%, 17%, 19%, 22%, 24%, 53%, 55%, 100% { opacity: 1; }
+  18%, 23%, 54% { opacity: .82; }
+}
+
+/* ── Separator lines + icon ── */
+.neon-sep {
+  display: -webkit-flex; display: flex;
+  -webkit-align-items: center; align-items: center;
+  gap: 14px; margin-bottom: 18px;
+}
+
+.neon-sep-line {
+  height: 1.5px; width: 80px;
+  background: -webkit-linear-gradient(left, transparent, var(--nc));
+  background: linear-gradient(to right, transparent, var(--nc));
+  box-shadow: 0 0 5px var(--nc);
+}
+.neon-sep-line.rev {
+  background: -webkit-linear-gradient(right, transparent, var(--nc));
+  background: linear-gradient(to left, transparent, var(--nc));
+}
+
+.neon-icon-ring {
+  width: 52px; height: 52px;
+  border: 2.5px solid var(--nc);
+  border-radius: 50%;
+  display: -webkit-flex; display: flex;
+  -webkit-align-items: center; align-items: center;
+  -webkit-justify-content: center; justify-content: center;
+  font-size: 24px; color: var(--nt);
+  box-shadow: 0 0 12px var(--nc), inset 0 0 10px var(--nc-dim);
+}
+
+.neon-overlay.active .neon-icon-ring {
+  -webkit-animation: icon-glow 1.8s ease-in-out infinite alternate;
+  animation: icon-glow 1.8s ease-in-out infinite alternate;
+}
+
+@-webkit-keyframes icon-glow {
+  from { box-shadow: 0 0 10px var(--nc), inset 0 0 8px var(--nc-dim); }
+  to   { box-shadow: 0 0 22px var(--nc), 0 0 40px var(--nc-dim), inset 0 0 16px var(--nc-dim); }
+}
+@keyframes icon-glow {
+  from { box-shadow: 0 0 10px var(--nc), inset 0 0 8px var(--nc-dim); }
+  to   { box-shadow: 0 0 22px var(--nc), 0 0 40px var(--nc-dim), inset 0 0 16px var(--nc-dim); }
+}
+
+/* checkmark pop-in for done */
+.neon-overlay.st-done.active .neon-icon-ring {
+  -webkit-animation:
+    check-pop .5s cubic-bezier(.34,1.56,.64,1) forwards,
+    icon-glow 1.8s .5s ease-in-out infinite alternate;
+  animation:
+    check-pop .5s cubic-bezier(.34,1.56,.64,1) forwards,
+    icon-glow 1.8s .5s ease-in-out infinite alternate;
+}
+
+@-webkit-keyframes check-pop {
+  from { -webkit-transform: scale(0) rotate(-25deg); opacity: 0; }
+  to   { -webkit-transform: scale(1) rotate(0);      opacity: 1; }
+}
+@keyframes check-pop {
+  from { transform: scale(0) rotate(-25deg); opacity: 0; }
+  to   { transform: scale(1) rotate(0);      opacity: 1; }
+}
+
+/* ── Loading bar (wait state only) ── */
+.neon-bar {
+  width: 200px; height: 5px;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 3px; overflow: hidden;
+  background: rgba(0,0,0,.5);
+  margin-bottom: 10px;
+}
+
+.neon-bar-fill {
+  height: 100%;
+  background: var(--nc);
+  box-shadow: 0 0 10px var(--nc);
+  border-radius: 3px;
+  -webkit-animation: bar-sweep 2.4s cubic-bezier(.4,0,.2,1) infinite;
+  animation: bar-sweep 2.4s cubic-bezier(.4,0,.2,1) infinite;
+}
+
+@-webkit-keyframes bar-sweep {
+  0%   { width: 0%;  margin-left: 0; }
+  45%  { width: 70%; margin-left: 0; }
+  55%  { width: 70%; margin-left: 30%; }
+  100% { width: 0%;  margin-left: 100%; }
+}
+@keyframes bar-sweep {
+  0%   { width: 0%;  margin-left: 0; }
+  45%  { width: 70%; margin-left: 0; }
+  55%  { width: 70%; margin-left: 30%; }
+  100% { width: 0%;  margin-left: 100%; }
+}
+
+/* ── Dots (wait state only) ── */
+.neon-dots {
+  display: -webkit-flex; display: flex;
+  gap: 8px; margin-bottom: 2px;
+}
+.neon-dots span {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--nc); box-shadow: 0 0 6px var(--nc);
+  -webkit-animation: dot-pop 1.2s ease-in-out infinite;
+  animation: dot-pop 1.2s ease-in-out infinite;
+}
+.neon-dots span:nth-child(2) { -webkit-animation-delay: .22s; animation-delay: .22s; }
+.neon-dots span:nth-child(3) { -webkit-animation-delay: .44s; animation-delay: .44s; }
+
+@-webkit-keyframes dot-pop {
+  0%, 100% { opacity: .25; -webkit-transform: scale(.7); }
+  50%       { opacity: 1;   -webkit-transform: scale(1.2); }
+}
+@keyframes dot-pop {
+  0%, 100% { opacity: .25; transform: scale(.7); }
+  50%       { opacity: 1;   transform: scale(1.2); }
+}
+
+/* ── Tap hint ── */
+.neon-hint {
+  font-size: 12px; font-weight: 600;
+  color: var(--nc); opacity: .7;
+  letter-spacing: .06em; margin-top: 16px;
+  text-shadow: 0 0 8px var(--nc);
+  -webkit-animation: hint-blink 1.8s ease-in-out infinite;
+  animation: hint-blink 1.8s ease-in-out infinite;
+}
+.neon-hint:empty { display: none; }
+
+@-webkit-keyframes hint-blink {
+  0%, 100% { opacity: .5; }   50% { opacity: .95; }
+}
+@keyframes hint-blink {
+  0%, 100% { opacity: .5; }   50% { opacity: .95; }
+}
+
+/* Hide bar & dots in done/fail states */
+.neon-overlay.st-done .neon-bar,
+.neon-overlay.st-done .neon-dots,
+.neon-overlay.st-fail .neon-bar,
+.neon-overlay.st-fail .neon-dots { display: none; }
+
+/* ── Floor glow ── */
+.neon-floor {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  height: 35%; pointer-events: none;
+  background: radial-gradient(ellipse 65% 55% at 50% 100%, var(--nc), transparent 65%);
+  opacity: .2;
+  -webkit-animation: floor-pulse 3s ease-in-out infinite alternate;
+  animation: floor-pulse 3s ease-in-out infinite alternate;
+}
+@-webkit-keyframes floor-pulse {
+  from { opacity: .14; }   to { opacity: .28; }
+}
+@keyframes floor-pulse {
+  from { opacity: .14; }   to { opacity: .28; }
+}
+
+/* ── Fog ── */
+.neon-fog {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  height: 30%; pointer-events: none;
+  background: radial-gradient(ellipse 90% 80% at 50% 100%, var(--nc), transparent 55%);
+  opacity: 0; filter: blur(22px);
+  -webkit-animation: fog-rise 4s ease-in-out infinite alternate;
+  animation: fog-rise 4s ease-in-out infinite alternate;
+}
+@-webkit-keyframes fog-rise {
+  from { opacity: 0;   -webkit-transform: scaleY(.85); }
+  to   { opacity: .18; -webkit-transform: scaleY(1.1); }
+}
+@keyframes fog-rise {
+  from { opacity: 0;   transform: scaleY(.85); }
+  to   { opacity: .18; transform: scaleY(1.1); }
+}
+
+/* ══════════════════════════════════════
+   9. RESPONSIVE
+   ══════════════════════════════════════ */
+@media (max-width: 640px) {
+  #brand       { padding: 10px 14px; }
+  .brand-name  { font-size: 16px; letter-spacing: .14em; }
+  .tg-btn      { padding: 6px 11px; }
+  #wrap        { padding: 10px; gap: 10px; }
+  .hero        { border-radius: 10px; }
+  #state       { font-size: 17px; }
+  .status      { padding: 14px 14px 12px; }
+  .footer      { -webkit-flex-direction: column; flex-direction: column; -webkit-align-items: flex-start; align-items: flex-start; }
+  .neon-col-l  { left: 22px; }
+  .neon-col-r  { right: 22px; }
+  .neon-body   { padding: 0 54px; }
+  .neon-msg    { font-size: 34px; }
+  .neon-col::before { top: 60px; }
+  .neon-col::after  { bottom: 60px; }
+}
+
+/* PS4 Browser 1920×1080 */
+@media (min-width: 1280px) {
+  #brand { padding: 14px 32px; }
+  #wrap  { padding: 20px 32px; }
+  #state { font-size: 22px; }
+}
+
+</style>
+</head>
+<body>
+
+<!-- ── Header ────────────────────────── -->
+<header id="brand">
+  <div class="brand-name"><span class="ix">iX</span>GAME.io</div>
+  <a class="tg-btn" href="https://t.me/t_9_k" rel="noopener">Telegram @t_9_k</a>
+</header>
+
+<!-- ── Main ──────────────────────────── -->
+<main id="wrap">
+
+  <!-- Banner -->
+  <section class="hero" id="hero-section" aria-label="iXGAME.io banner">
+    <img src="ixgame-banner.png" alt="iXGAME.io PS4 WebKit" loading="eager"
+         onerror="document.getElementById('hero-section').classList.add('img-error')">
+    <div class="hero-fallback">iXGAME.io</div>
+    <span class="hero-label" aria-hidden="true">PS4 WebKit</span>
+  </section>
+
+  <!-- Status card -->
+  <section class="status" id="status-card" aria-live="polite" aria-atomic="true">
+    <div id="state" class="detecting">detecting firmware&#8230;</div>
+    <div id="det"></div>
+    <div id="cache"></div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div>
+      <strong>iXGAME.io</strong> &mdash; Original work by Aiham &middot; &copy; 2026 Aiham
+    </div>
+    <div>
+      <a href="https://t.me/t_9_k" rel="noopener">Telegram: @t_9_k</a>
+      &nbsp;&middot;&nbsp; PS4 WebKit Interface
+    </div>
+  </footer>
+
+</main>
+
+<!-- ══════════════════════════════════════
+     NEON OVERLAY — Pure CSS animation
+     No image files. Three states:
+       st-wait  (orange)  الرجاء الانتظار
+       st-done  (green)   تم التعديل
+       st-fail  (red)     الفيرموير غير مدعوم
+     ══════════════════════════════════════ -->
+<div class="neon-overlay" id="neon-overlay">
+
+  <div class="neon-col neon-col-l"></div>
+  <div class="neon-col neon-col-r"></div>
+
+  <div class="neon-body">
+
+    <!-- iXGAME logo (SVG, no external file) -->
+    <div class="neon-logo">
+      <svg width="46" height="42" viewBox="0 0 46 42" fill="none"
+           xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <!-- X shape: two crossed bars -->
+        <line x1="2"  y1="2"  x2="44" y2="40" stroke="var(--nt)" stroke-width="7" stroke-linecap="square"/>
+        <line x1="44" y1="2"  x2="2"  y2="40" stroke="var(--nt)" stroke-width="7" stroke-linecap="square"/>
+        <!-- metallic highlight -->
+        <line x1="2"  y1="2"  x2="44" y2="40" stroke="rgba(255,255,255,.3)" stroke-width="2" stroke-linecap="square"/>
+        <line x1="44" y1="2"  x2="2"  y2="40" stroke="rgba(255,255,255,.3)" stroke-width="2" stroke-linecap="square"/>
+      </svg>
+      <div class="neon-logo-label">iXGAME</div>
+    </div>
+
+    <!-- Arabic status message -->
+    <div class="neon-msg" id="neon-msg">&#x627;&#x644;&#x631;&#x62C;&#x627;&#x621; &#x627;&#x644;&#x627;&#x646;&#x62A;&#x638;&#x627;&#x631;</div>
+
+    <!-- Separator + icon -->
+    <div class="neon-sep">
+      <span class="neon-sep-line rev"></span>
+      <span class="neon-icon-ring" id="neon-icon">&#9711;</span>
+      <span class="neon-sep-line"></span>
+    </div>
+
+    <!-- Loading bar — wait state -->
+    <div class="neon-bar">
+      <div class="neon-bar-fill"></div>
+    </div>
+
+    <!-- Dots — wait state -->
+    <div class="neon-dots">
+      <span></span><span></span><span></span>
+    </div>
+
+    <!-- Tap hint -->
+    <div class="neon-hint" id="neon-hint"></div>
+
+  </div><!-- /neon-body -->
+
+  <div class="neon-floor"></div>
+  <div class="neon-fog"></div>
+
+</div><!-- /neon-overlay -->
+
+
+<script>
+/*
+ * iXGAME.io
+ * Original work by Aiham · Copyright © 2026 Aiham
+ * Telegram: https://t.me/t_9_k
+ *
+ * Routing targets (not modified here):
+ *   run_lapse.html / run_poops.html
+ */
+(function () {
+
+  /* DOM refs */
+  var stateEl  = document.getElementById("state");
+  var detEl    = document.getElementById("det");
+  var cacheEl  = document.getElementById("cache");
+  var cardEl   = document.getElementById("status-card");
+
+  /* Overlay refs */
+  var overlay  = document.getElementById("neon-overlay");
+  var neonMsg  = document.getElementById("neon-msg");
+  var neonIcon = document.getElementById("neon-icon");
+  var neonHint = document.getElementById("neon-hint");
+
+  /* ── Overlay controller (UI only, no logic) ── */
+  function showOverlay(type, msg, icon, hint) {
+    neonMsg.textContent  = msg  || "\u0627\u0644\u0631\u062C\u0627\u0621 \u0627\u0644\u0627\u0646\u062A\u0638\u0627\u0631";
+    neonIcon.textContent = icon || "\u25CB";
+    neonHint.textContent = hint || "";
+    overlay.className    = "neon-overlay active st-" + (type || "wait");
+  }
+
+  function hideOverlay() {
+    overlay.classList.remove("active");
+  }
+
+  /* ── setState: text + card accent + overlay ── */
+  function setState(t, c) {
+    stateEl.textContent = t;
+    stateEl.className   = c || "";
+    cardEl.className    = "status" + (c ? " state-" + c : "");
+
+    if (c === "bad") {
+      showOverlay("fail",
+        "\u0627\u0644\u0641\u064A\u0631\u0645\u0648\u064A\u0631 \u063A\u064A\u0631 \u0645\u062F\u0639\u0648\u0645",
+        "\u2715", "");
+    } else if (c === "warn") {
+      if (t.indexOf("UPDATE READY") !== -1 || t.indexOf("CACHED") !== -1) {
+        showOverlay("done",
+          "\u062A\u0645 \u0627\u0644\u062A\u0639\u062F\u064A\u0644",
+          "\u2713",
+          "\u0627\u0636\u063A\u0637 X \u0623\u0648 \u0627\u0646\u0642\u0631 \u0644\u0644\u0645\u062A\u0627\u0628\u0639\u0629");
+      } else {
+        showOverlay("wait",
+          "\u0627\u0644\u0631\u062C\u0627\u0621 \u0627\u0644\u0627\u0646\u062A\u0638\u0627\u0631",
+          "\u25CB",
+          t.indexOf("FAILED") !== -1 || t.indexOf("OBSOLETE") !== -1
+            ? "\u0627\u0636\u063A\u0637 X \u0623\u0648 \u0627\u0646\u0642\u0631 \u0644\u0644\u0645\u062A\u0627\u0628\u0639\u0629"
+            : "");
+      }
+    } else {
+      hideOverlay();
+    }
+  }
+
+  function setCache(t, ok) {
+    cacheEl.textContent = t;
+    cacheEl.className   = ok ? "ok" : "";
+  }
+
+  /* ════════════════════════════════════════════
+     ORIGINAL LOGIC — UNCHANGED
+     ════════════════════════════════════════════ */
+
+  var params = new URLSearchParams(location.search);
+  var key = null, fwnum = null;
+  var m = /PlayStation\s+4[\/ ](\d+)\.(\d+)/.exec(navigator.userAgent);
+  if (m) {
+    var minor = parseInt(m[2], 16);
+    var ms = minor.toString(16);
+    if (ms.length < 2) ms = "0" + ms;
+    key   = m[1] + "." + ms;
+    fwnum = parseInt(m[1], 10) * 100 + parseInt(ms, 10);
+  }
+
+  var bug = null, why = "";
+  var forced = params.get("bug");
+  if (forced === "lapse" || forced === "poops") {
+    bug = forced; why = "forced via ?bug=" + forced;
+  } else if (!key) {
+    why = "user-agent is not a PlayStation 4";
+  } else if (fwnum <= 1202) {
+    bug = "lapse"; why = key + " <= 12.02";
+  } else if (fwnum >= 1250) {
+    bug = "poops"; why = key + " >= 12.50";
+  } else {
+    why = key + " -- no working bug (lapse ends at 12.02, poops needs 12.50)";
+  }
+
+  detEl.innerHTML = "firmware <b>" + (key || "unknown") + "</b>"
+    + " &middot; bug <b>" + (bug || "none") + "</b> &middot; " + why;
+
+  if (!bug) { setState("UNSUPPORTED FIRMWARE", "bad"); return; }
+
+  var target = (bug === "lapse" ? "run_lapse.html" : "run_poops.html")
+    + location.search;
+
+  function go() {
+    setState("loading " + bug + " chain...", "warn");
+    location.replace(target);
+  }
+
+  function waitForTap(msg, action) {
+    setState(msg, "warn");
+    function fire() {
+      window.removeEventListener("click",   fire);
+      window.removeEventListener("keydown", fire);
+      action();
+    }
+    window.addEventListener("click",   fire);
+    window.addEventListener("keydown", fire);
+  }
+
+  var ac = window.applicationCache;
+  if (!ac || !document.documentElement.hasAttribute("manifest")) {
+    go();
+  } else if (!navigator.onLine) {
+    setCache("offline -- from cache", true);
+    go();
+  } else if (ac.status === ac.IDLE) {
+    setCache("cached", true);
+    go();
+  } else if (ac.status === ac.UPDATEREADY) {
+    try { ac.swapCache(); } catch (e) {}
+    setCache("update downloaded", true);
+    waitForTap("UPDATE READY -- press X or tap to reload & run",
+               function () { location.reload(); });
+  } else {
+    setCache("checking cache...");
+    ac.addEventListener("downloading",
+      function () { setCache("caching for offline (first run)..."); }, false);
+    ac.addEventListener("progress", function (e) {
+      if (e && e.total)
+        setCache("caching " + Math.round((e.loaded / e.total) * 100) + "%");
+    }, false);
+    ac.addEventListener("cached", function () {
+      setCache("cached for offline use", true);
+      waitForTap("CACHED (first run) -- press X or tap to run", go);
+    }, false);
+    ac.addEventListener("updateready", function () {
+      try { ac.swapCache(); } catch (e) {}
+      setCache("update downloaded", true);
+      waitForTap("UPDATE READY -- press X or tap to reload & run",
+                 function () { location.reload(); });
+    }, false);
+    ac.addEventListener("noupdate", function () {
+      setCache("cached -- offline ready", true);
+      go();
+    }, false);
+    ac.addEventListener("error", function () {
+      setCache("cache unavailable");
+      waitForTap("CACHE FAILED -- press X or tap to run anyway", go);
+    }, false);
+    ac.addEventListener("obsolete", function () {
+      setCache("cache obsolete");
+      waitForTap("CACHE OBSOLETE -- press X or tap to run", go);
+    }, false);
+  }
+
+})();
+</script>
+</body>
+</html>
