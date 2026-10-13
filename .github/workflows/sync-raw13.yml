@@ -1,0 +1,53 @@
+
+name: Sync RAW13G files
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout iXGAME
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Download RAW13G source
+        run: |
+          git clone --depth 1 \
+            https://github.com/raw13g/raw13g.github.io.git \
+            /tmp/raw13
+
+      - name: Copy source files
+        run: |
+          rsync -av /tmp/raw13/ ./ \
+            --exclude='.git/' \
+            --exclude='.github/' \
+            --exclude='index.html' \
+            --exclude='cache.appcache' \
+            --exclude='README.md' \
+            --exclude='LICENSE' \
+            --exclude='.gitignore'
+
+          cp /tmp/raw13/LICENSE ./RAW13-LICENSE
+
+      - name: Commit imported files
+        run: |
+          git add -A
+
+          if git diff --cached --quiet; then
+            echo "No changes to import."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email \
+            "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git commit -m "Import RAW13G source files"
+          git push origin HEAD:main
