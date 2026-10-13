@@ -1,53 +1,56 @@
-
-name: Sync RAW13G files
-
+name: Extract iXGAME and Sync RAW13G
 on:
   workflow_dispatch:
-
 permissions:
   contents: write
-
 jobs:
   sync:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout iXGAME
         uses: actions/checkout@v4
         with:
           ref: main
-
+      - name: Extract iXGAME ZIP
+        run: |
+          ZIP_FILE="iXGAME-from-scratch.zip"
+          if [ -f "$ZIP_FILE" ]; then
+            mkdir -p /tmp/ixgame-zip
+            unzip -o "$ZIP_FILE" -d /tmp/ixgame-zip
+            # دمج الملفات المستخرجة مع ملفات المشروع
+            cp -a /tmp/ixgame-zip/. ./
+          else
+            echo "ZIP file not found: $ZIP_FILE"
+            exit 1
+          fi
       - name: Download RAW13G source
         run: |
           git clone --depth 1 \
             https://github.com/raw13g/raw13g.github.io.git \
             /tmp/raw13
-
-      - name: Copy source files
+      - name: Copy RAW13G files over extracted files
         run: |
           rsync -av /tmp/raw13/ ./ \
             --exclude='.git/' \
             --exclude='.github/' \
             --exclude='index.html' \
-            --exclude='cache.appcache' \
             --exclude='README.md' \
+            --exclude='.gitignore' \
             --exclude='LICENSE' \
-            --exclude='.gitignore'
-
+            --exclude='iXGAME-from-scratch.zip'
           cp /tmp/raw13/LICENSE ./RAW13-LICENSE
-
-      - name: Commit imported files
+      - name: Remove temporary ZIP from published project
+        run: |
+          rm -f iXGAME-from-scratch.zip
+      - name: Commit changes
         run: |
           git add -A
-
           if git diff --cached --quiet; then
-            echo "No changes to import."
+            echo "No changes to commit."
             exit 0
           fi
-
           git config user.name "github-actions[bot]"
           git config user.email \
             "41898282+github-actions[bot]@users.noreply.github.com"
-
-          git commit -m "Import RAW13G source files"
+          git commit -m "Extract iXGAME and merge RAW13G source"
           git push origin HEAD:main
