@@ -1,0 +1,204 @@
+name: iXGAME Auto Build and Deploy
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: ixgame-pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Extract ZIP and generate missing project structure
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile, BadZipFile
+          import json
+          import shutil
+          import stat
+          import re
+
+          ROOT = Path.cwd().resolve()
+          STAGING = ROOT / ".ixgame-staging"
+          OUTPUT = ROOT / "_site"
+          ZIP_NAMES = {"iXGAME-PS4-Platform-Full.zip", "iXGAME-PS4-Platform.zip", "ixgame.zip"}
+          EXCLUDED = {".git", ".github", ".ixgame-staging", "_site"}
+
+          def excluded(path):
+              return any(part in EXCLUDED for part in path.parts)
+
+          for folder in (STAGING, OUTPUT):
+              if folder.exists():
+                  shutil.rmtree(folder)
+          STAGING.mkdir(parents=True)
+
+          archives = [p for p in ROOT.rglob("*") if p.is_file() and p.name in ZIP_NAMES and not excluded(p.relative_to(ROOT))]
+          if len(archives) > 1:
+              raise SystemExit("ERROR: Multiple supported ZIPs found:\n" + "\n".join(str(p.relative_to(ROOT)) for p in archives))
+
+          if archives:
+              archive = archives[0]
+              print("ZIP found:", archive.relative_to(ROOT))
+              try:
+                  with ZipFile(archive) as zf:
+                      entries = zf.infolist()
+                      if not entries:
+                          raise SystemExit("ERROR: ZIP archive is empty.")
+                      if sum(x.file_size for x in entries) > 500 * 1024 * 1024:
+                          raise SystemExit("ERROR: ZIP expands beyond 500 MB.")
+                      for item in entries:
+                          destination = (STAGING / item.filename).resolve()
+                          if destination != STAGING and STAGING not in destination.parents:
+                              raise SystemExit("ERROR: Unsafe ZIP path: " + item.filename)
+                          mode = (item.external_attr >> 16) & 0o170000
+                          if mode == stat.S_IFLNK:
+                              raise SystemExit("ERROR: ZIP symlink rejected: " + item.filename)
+                      zf.extractall(STAGING)
+              except BadZipFile:
+                  raise SystemExit("ERROR: ZIP is damaged or invalid.")
+              SEARCH_ROOT = STAGING
+          else:
+              print("No ZIP found; using website files committed directly to repository.")
+              SEARCH_ROOT = ROOT
+
+          indexes = []
+          for index in SEARCH_ROOT.rglob("index.html"):
+              rel = index.relative_to(SEARCH_ROOT)
+              if not excluded(rel):
+                  indexes.append(index.parent)
+          if not indexes:
+              raise SystemExit("ERROR: index.html not found. Upload the iXGAME ZIP or commit the extracted website.")
+
+          def score(folder):
+              markers = [folder / "assets/css/style.css", folder / "assets/js/app.js", folder / "assets/img/raven.svg", folder / "pages"]
+              return sum(p.exists() for p in markers)
+
+          indexes = sorted(set(indexes), key=lambda p: (-score(p), len(p.parts), str(p)))
+          best_score = score(indexes[0])
+          best = [p for p in indexes if score(p) == best_score]
+          if len(best) > 1:
+              raise SystemExit("ERROR: Multiple possible site roots found:\n" + "\n".join(str(p.relative_to(SEARCH_ROOT)) for p in best))
+
+          SITE_ROOT = best[0]
+          OUTPUT.mkdir(parents=True)
+          shutil.copytree(SITE_ROOT, OUTPUT, dirs_exist_ok=True)
+          print("Preserved website root:", SITE_ROOT.relative_to(SEARCH_ROOT) or ".")
+
+          for folder in (OUTPUT / "assets", OUTPUT / "pages", OUTPUT / "docs", OUTPUT / "data"):
+              folder.mkdir(parents=True, exist_ok=True)
+
+          registry = {
+              "project": "iXGAME",
+              "purpose": "Static research index and official source directory",
+              "routing": [
+                  {"firmware_range": "6.00–11.02", "route": "Lapse / NetCtrl", "source": "https://github.com/zecoxao/zecoxao.github.io/tree/main/ntfonto", "note": "Owner-defined routing only; verify exact versions in upstream documentation."},
+                  {"firmware_range": "11.50–13.00", "route": "RawGame4", "repository": "https://github.com/rawgame4/rawgame4.github.io", "official_host": "https://rawgame4.github.io/", "note": "Keep separate from Raw13G; do not infer unlisted firmware support."},
+                  {"firmware_range": "13.02–13.52", "route": "Raw13G", "repository": "https://github.com/raw13g/raw13g.github.io", "official_host": "https://raw13g.github.io/", "note": "Keep separate from RawGame4; do not infer unlisted firmware support."}
+              ],
+              "additional_reference": {"name": "GoldHEN", "repository": "https://github.com/GoldHEN/GoldHEN"},
+              "limitations": ["Routing ranges are owner-defined, not independent compatibility verification.", "No PS4 hardware test is implied.", "This workflow does not build, execute, or package exploits, kernel patches, protection bypasses, or payload binaries."]
+          }
+          registry_path = OUTPUT / "data/sources.json"
+          if not registry_path.exists():
+              registry_path.write_text(json.dumps(registry, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+          sources_page = '''<!doctype html>
+          <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#090a0e"><title>Official Sources | iXGAME</title><link rel="stylesheet" href="../assets/css/style.css"></head>
+          <body><header class="topbar"><a class="brand" href="../index.html"><span><b>iX<span>GAME</span></b><small>RAVEN PROTOCOL</small></span></a><nav><a href="../index.html">Dashboard</a><a href="firmware.html">Firmware</a><a href="docs.html">Docs</a><a class="active" href="sources.html">Sources</a></nav></header>
+          <main><section class="page-hero"><div class="eyebrow">IXGAME / UPSTREAM DIRECTORY</div><h1>OFFICIAL SOURCES</h1><p>Links to original repositories and official hosts. This is a reference index, not a compatibility guarantee.</p></section>
+          <section class="content-panel"><h2>Owner-defined firmware routing</h2><div class="table-wrap"><table class="data-table"><thead><tr><th>Range</th><th>Project</th><th>Official source</th></tr></thead><tbody>
+          <tr><td>6.00–11.02</td><td>Lapse / NetCtrl</td><td><a href="https://github.com/zecoxao/zecoxao.github.io/tree/main/ntfonto" target="_blank" rel="noopener">ntfonto repository</a></td></tr>
+          <tr><td>11.50–13.00</td><td>RawGame4</td><td><a href="https://github.com/rawgame4/rawgame4.github.io" target="_blank" rel="noopener">Repository</a> · <a href="https://rawgame4.github.io/" target="_blank" rel="noopener">Official host</a></td></tr>
+          <tr><td>13.02–13.52</td><td>Raw13G</td><td><a href="https://github.com/raw13g/raw13g.github.io" target="_blank" rel="noopener">Repository</a> · <a href="https://raw13g.github.io/" target="_blank" rel="noopener">Official host</a></td></tr>
+          <tr><td>Additional reference</td><td>GoldHEN</td><td><a href="https://github.com/GoldHEN/GoldHEN" target="_blank" rel="noopener">Official repository</a></td></tr>
+          </tbody></table></div><p class="notice"><b>Important:</b> These ranges are routing directions supplied by the project owner. Check upstream documentation for explicitly listed versions. No PS4 hardware testing is claimed.</p></section></main>
+          <footer><a class="footer-brand" href="../index.html">iXGAME</a><span>INDEPENDENT COMMUNITY PROJECT · NOT AFFILIATED WITH SONY</span></footer></body></html>'''
+          if not (OUTPUT / "pages/sources.html").exists():
+              (OUTPUT / "pages/sources.html").write_text(sources_page, encoding="utf-8")
+
+          structure_doc = '''# iXGAME generated project structure
+
+          The workflow creates missing scaffolding without overwriting supplied files.
+
+          - `index.html`: original dashboard, preserved.
+          - `assets/`: styles, scripts and artwork.
+          - `pages/`: site sections and official-source index.
+          - `docs/`: documentation and project notes.
+          - `data/sources.json`: owner-defined routing and upstream references.
+
+          ## Owner-defined routing
+          - 6.00–11.02 → Lapse / NetCtrl
+          - 11.50–13.00 → RawGame4
+          - 13.02–13.52 → Raw13G
+
+          These are routing ranges only. Do not infer support for intermediate versions.
+          Verify compatibility, dependencies, hosting requirements and licensing at upstream sources.
+          This workflow does not build or execute exploits, kernel patches, bypasses or payload binaries,
+          and does not perform PS4 hardware tests.
+          '''
+          if not (OUTPUT / "docs/AUTO-GENERATED-STRUCTURE.md").exists():
+              (OUTPUT / "docs/AUTO-GENERATED-STRUCTURE.md").write_text(structure_doc, encoding="utf-8")
+
+          if not (OUTPUT / "README.md").exists():
+              (OUTPUT / "README.md").write_text("# iXGAME — Raven Protocol\n\nStatic research portal. Existing frontend files are preserved. Missing docs and source index scaffolding are generated without overwriting supplied files. See `pages/sources.html`, `data/sources.json`, and `docs/`.\n", encoding="utf-8")
+
+          (OUTPUT / ".nojekyll").touch(exist_ok=True)
+
+          broken = []
+          for html in OUTPUT.rglob("*.html"):
+              body = html.read_text(encoding="utf-8", errors="replace")
+              for link in re.findall(r'''(?:href|src)=["']([^"'#]+)["']''', body):
+                  if link.startswith(("http://", "https://", "mailto:", "tel:", "data:", "javascript:")):
+                      continue
+                  target = (html.parent / link.split("?", 1)[0]).resolve()
+                  if not target.exists():
+                      broken.append(f"{html.relative_to(OUTPUT)} -> {link}")
+          if broken:
+              print("WARNING: Broken local links:")
+              for item in broken[:50]:
+                  print(" -", item)
+          else:
+              print("Local HTML link check: PASS")
+
+          print("Prepared website files:", sum(1 for p in OUTPUT.rglob("*") if p.is_file()))
+          print("SUCCESS: iXGAME Raven Protocol is ready for GitHub Pages.")
+          if STAGING.exists():
+              shutil.rmtree(STAGING)
+          PY
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy iXGAME
+        id: deployment
+        uses: actions/deploy-pages@v4
+      - name: Print deployment URL
+        run: |
+          echo "iXGAME deployed successfully."
+          echo "URL: ${{ steps.deployment.outputs.page_url }}"
