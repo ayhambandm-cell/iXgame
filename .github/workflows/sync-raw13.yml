@@ -1,56 +1,119 @@
-name: Extract iXGAME and Sync RAW13G
+
+name: iXGAME Auto Extract and Deploy
+
 on:
+  push:
+    branches:
+      - main
+      - master
   workflow_dispatch:
+
 permissions:
-  contents: write
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: ixgame-pages
+  cancel-in-progress: true
+
 jobs:
-  sync:
+  build:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout iXGAME
+      - name: Download Repository
         uses: actions/checkout@v4
+
+      - name: Extract ZIP and Prepare Website
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile
+          import shutil
+
+          root = Path(".").resolve()
+
+          zip_names = [
+              "iXGAME-PS4-Platform-Full.zip",
+              "iXGAME-PS4-Platform.zip",
+              "ixgame.zip"
+          ]
+
+          archive = next(
+              (root / name for name in zip_names
+               if (root / name).is_file()),
+              None
+          )
+
+          if archive is None:
+              raise SystemExit(
+                  "ERROR: ZIP file not found in repository root."
+              )
+
+          staging = root / ".ixgame-extract"
+
+          if staging.exists():
+              shutil.rmtree(staging)
+
+          staging.mkdir()
+
+          with ZipFile(archive) as zf:
+              for item in zf.infolist():
+                  target = (staging / item.filename).resolve()
+
+                  if target != staging and staging not in target.parents:
+                      raise SystemExit(
+                          f"Unsafe ZIP path: {item.filename}"
+                      )
+
+              zf.extractall(staging)
+
+          index_files = list(staging.rglob("index.html"))
+
+          if not index_files:
+              raise SystemExit("index.html not found inside ZIP.")
+
+          site_root = index_files[0].parent
+
+          if not (site_root / "assets").exists():
+              raise SystemExit("assets folder is missing.")
+
+          if not (site_root / "pages").exists():
+              raise SystemExit("pages folder is missing.")
+
+          output = root / "_site"
+
+          if output.exists():
+              shutil.rmtree(output)
+
+          shutil.copytree(site_root, output)
+
+          if not (output / "index.html").exists():
+              raise SystemExit("Website preparation failed.")
+
+          print("iXGAME extracted successfully.")
+          print("Website is ready for deployment.")
+          PY
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Website
+        uses: actions/upload-pages-artifact@v3
         with:
-          ref: main
-      - name: Extract iXGAME ZIP
-        run: |
-          ZIP_FILE="iXGAME-from-scratch.zip"
-          if [ -f "$ZIP_FILE" ]; then
-            mkdir -p /tmp/ixgame-zip
-            unzip -o "$ZIP_FILE" -d /tmp/ixgame-zip
-            # دمج الملفات المستخرجة مع ملفات المشروع
-            cp -a /tmp/ixgame-zip/. ./
-          else
-            echo "ZIP file not found: $ZIP_FILE"
-            exit 1
-          fi
-      - name: Download RAW13G source
-        run: |
-          git clone --depth 1 \
-            https://github.com/raw13g/raw13g.github.io.git \
-            /tmp/raw13
-      - name: Copy RAW13G files over extracted files
-        run: |
-          rsync -av /tmp/raw13/ ./ \
-            --exclude='.git/' \
-            --exclude='.github/' \
-            --exclude='index.html' \
-            --exclude='README.md' \
-            --exclude='.gitignore' \
-            --exclude='LICENSE' \
-            --exclude='iXGAME-from-scratch.zip'
-          cp /tmp/raw13/LICENSE ./RAW13-LICENSE
-      - name: Remove temporary ZIP from published project
-        run: |
-          rm -f iXGAME-from-scratch.zip
-      - name: Commit changes
-        run: |
-          git add -A
-          if git diff --cached --quiet; then
-            echo "No changes to commit."
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email \
-            "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "Extract iXGAME and merge RAW13G source"
-          git push origin HEAD:main
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Publish iXGAME
+        id: deployment
+        uses: actions/deploy-pages@v4
