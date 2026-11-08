@@ -1,0 +1,169 @@
+name: iXGAME Auto Extract and Deploy
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: ixgame-pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Validate, Extract ZIP, and Prepare Website
+        shell: bash
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile
+          import shutil
+          import stat
+
+          root = Path.cwd().resolve()
+
+          zip_names = (
+              "iXGAME-PS4-Platform-Full.zip",
+              "iXGAME-PS4-Platform.zip",
+              "ixgame.zip",
+          )
+
+          archive = next(
+              (root / name for name in zip_names if (root / name).is_file()),
+              None,
+          )
+
+          if archive is None:
+              raise SystemExit(
+                  "ERROR: No supported iXGAME ZIP was found in the repository root. "
+                  "Expected: " + ", ".join(zip_names)
+              )
+
+          staging = root / ".ixgame-extract"
+          output = root / "_site"
+
+          for directory in (staging, output):
+              if directory.exists():
+                  shutil.rmtree(directory)
+              directory.mkdir(parents=True)
+
+          # Validate every ZIP entry before extracting it.
+          with ZipFile(archive, "r") as zf:
+              entries = zf.infolist()
+
+              if not entries:
+                  raise SystemExit("ERROR: The ZIP archive is empty.")
+
+              total_uncompressed = sum(entry.file_size for entry in entries)
+              max_uncompressed = 500 * 1024 * 1024
+              if total_uncompressed > max_uncompressed:
+                  raise SystemExit(
+                      "ERROR: ZIP expands beyond the 500 MB safety limit."
+                  )
+
+              for entry in entries:
+                  target = (staging / entry.filename).resolve()
+
+                  if target != staging and staging not in target.parents:
+                      raise SystemExit(
+                          f"ERROR: Unsafe ZIP path detected: {entry.filename}"
+                      )
+
+                  # Reject symbolic links in the archive.
+                  mode = (entry.external_attr >> 16) & 0o170000
+                  if mode == stat.S_IFLNK:
+                      raise SystemExit(
+                          f"ERROR: Symbolic links are not allowed: {entry.filename}"
+                      )
+
+              zf.extractall(staging)
+
+          # Accept either a ZIP with the site at its root or one enclosing folder.
+          candidates = []
+          for index_file in staging.rglob("index.html"):
+              parent = index_file.parent
+              if (parent / "assets").is_dir() and (parent / "pages").is_dir():
+                  candidates.append(parent)
+
+          # Remove nested duplicate candidates, if any.
+          candidates = sorted(set(candidates), key=lambda p: (len(p.parts), str(p)))
+
+          if not candidates:
+              raise SystemExit(
+                  "ERROR: No valid website root found. The ZIP must contain "
+                  "index.html plus assets/ and pages/ in the same directory."
+              )
+
+          if len(candidates) > 1:
+              locations = "\n".join(str(p.relative_to(staging)) for p in candidates)
+              raise SystemExit(
+                  "ERROR: More than one possible website root was found. "
+                  "Keep only one valid site root in the ZIP:\n" + locations
+              )
+
+          site_root = candidates[0]
+
+          # Copy only the verified website directory into the Pages artifact.
+          shutil.copytree(site_root, output, dirs_exist_ok=True)
+
+          required = (
+              output / "index.html",
+              output / "assets",
+              output / "pages",
+          )
+          missing = [str(path.name) for path in required if not path.exists()]
+          if missing:
+              raise SystemExit(
+                  "ERROR: Website preparation failed; missing: " + ", ".join(missing)
+              )
+
+          if (output / "index.html").stat().st_size == 0:
+              raise SystemExit("ERROR: index.html is empty.")
+
+          print(f"Archive: {archive.name}")
+          print(f"Website root inside ZIP: {site_root.relative_to(staging) or '.'}")
+          print(f"Files prepared: {sum(1 for p in output.rglob('*') if p.is_file())}")
+          print("SUCCESS: iXGAME website is ready for GitHub Pages.")
+
+          # Remove temporary extracted content; _site is retained for upload.
+          shutil.rmtree(staging)
+          PY
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload GitHub Pages Artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Deploy iXGAME to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+      - name: Show Published Website
+        run: |
+          echo "iXGAME has been deployed."
+          echo "Website URL: ${{ steps.deployment.outputs.page_url }}"
